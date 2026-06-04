@@ -1,6 +1,11 @@
 {
-  "version": "0.0.0",
-  "notes": "Initial setup",
+  "version": "0.1.1",
+  "notes": "Current release",
   "pub_date": "2026-06-04T00:00:00Z",
-  "platforms": {}
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "这里填入 .sig 文件的内容",
+      "url": "https://github.com/ProstonJay/OmniMatrix-Client/releases/download/v0.1.1/OmniMatrix_0.1.1_x64-setup.exe"
+    }
+  }
 }

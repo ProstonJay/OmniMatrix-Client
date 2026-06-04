@@ -456,16 +456,24 @@ async function main() {
 
     // ======= 执行核心防封输入业务 =======
 
+    // ======= 执行核心防封输入业务 =======
+
     // 激活输入框
     await randDelay(page, 800, 2000);
     await bionicClick(page, editor);
     await randDelay(page, 400, 900);
 
-    // 仿生打字流（3% 错字纠错 + 5% 停顿思考）
-    for (let i = 0; i < replyText.length; i++) {
-      const char = replyText[i];
+    // 【修复核心】将字符串转为真正由独立字符（含完整Emoji）组成的数组
+    const charArray = Array.from(replyText);
 
-      if (Math.random() < 0.03 && i < replyText.length - 1) {
+    // 仿生打字流（3% 错字纠错 + 5% 停顿思考）
+    for (let i = 0; i < charArray.length; i++) {
+      const char = charArray[i];
+
+      // 只有当字符不是 Emoji/特殊符号时，才允许触发错字纠错机制（规避charCodeAt在Emoji上的异常）
+      const isNormalChar = char.length === 1 && char.charCodeAt(0) < 0xD800;
+
+      if (isNormalChar && Math.random() < 0.03 && i < charArray.length - 1) {
         const wrongChar = String.fromCharCode(char.charCodeAt(0) + 1);
         await page.keyboard.type(wrongChar);
         await randDelay(page, 150, 300);
@@ -473,6 +481,7 @@ async function main() {
         await randDelay(page, 100, 250);
       }
 
+      // 无论是正常字还是完整的 Emoji，现在都能安全输入了
       await page.keyboard.type(char, { delay: 0 });
       await randDelay(page, 60, 180);
 

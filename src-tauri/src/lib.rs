@@ -156,8 +156,8 @@ async fn store_read(app: tauri::AppHandle, key: String) -> Result<Option<String>
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        // 👇 核心：把更新器插件 (tauri-plugin-updater) 初始化加到这里
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![run_reply_script, native_get, native_post, store_write, store_read])

@@ -2,8 +2,9 @@
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { invoke } from '@tauri-apps/api/core'
+import { check as checkUpdate } from '@tauri-apps/plugin-updater'
+import { relaunch } from '@tauri-apps/plugin-process'
 import pkg from '../package.json'
-import { generateDeepSeekReply } from './lib/deepSeekClient.js'
 
 import TopBar from './components/TopBar.vue'
 import Dashboard from './components/Dashboard.vue'
@@ -493,6 +494,8 @@ onMounted(async () => {
   startAdsPoll()
   sendHeartbeat(); heartbeatTimer = setInterval(sendHeartbeat, 5000); cooldownTimer = setInterval(runCooldownScan, 10000)
   setInterval(() => ensureFetchTasks().catch(() => { }), 5000)
+  // 启动后延迟 3 秒检查更新，避免影响启动速度
+  setTimeout(() => checkAppUpdate().catch(() => {}), 3000)
 })
 onUnmounted(() => { clearInterval(heartbeatTimer); clearInterval(cooldownTimer); stopAdsPoll() })
 
@@ -501,6 +504,44 @@ function onSaveConfig(newCfg) {
   // 立即根据新配置刷新并重启轮询
   loadAccountsFromAds().catch(() => { })
   stopAdsPoll(); startAdsPoll()
+}
+
+// ─── 自动更新
+const updateAvailable = ref(false)
+const updateVersion = ref('')
+const updateDownloading = ref(false)
+
+async function checkAppUpdate() {
+  try {
+    addLog('info', '🔍 正在檢查軟體更新...')
+    const update = await checkUpdate()
+    if (update) {
+      updateAvailable.value = true
+      updateVersion.value = update.version
+      addLog('info', `🆕 發現新版本 v${update.version}，點擊頂欄更新按鈕開始下載`)
+    } else {
+      addLog('info', `✅ 當前已是最新版本 v${appVersion}`)
+    }
+  } catch (e) {
+    addLog('warn', `檢查更新失敗: ${e?.message || e}`)
+  }
+}
+
+async function doUpdate() {
+  if (updateDownloading.value) return
+  updateDownloading.value = true
+  addLog('info', `⬇️ 開始下載更新 v${updateVersion.value}...`)
+  try {
+    const update = await checkUpdate()
+    if (!update) { addLog('warn', '更新資訊已失效，請重試'); updateDownloading.value = false; return }
+    await update.downloadAndInstall()
+    addLog('info', '✅ 更新下載完成，即將重啟...')
+    await new Promise(r => setTimeout(r, 1500))
+    await relaunch()
+  } catch (e) {
+    addLog('error', `更新失敗: ${e?.message || e}`)
+    updateDownloading.value = false
+  }
 }
 
 async function onMinimize() { try { await appWin.minimize() } catch (e) { addLog('error', `最小化失敗: ${e.message}`) } }
@@ -522,8 +563,8 @@ const heartbeatDot = computed(() => ({ ok: '🟢', error: '🔴', idle: '⚪', p
 <template>
   <div class="app">
     <TopBar :config="config" :appVersion="appVersion" :heartbeatDot="heartbeatDot" :heartbeatLatency="heartbeatLatency"
-      :serverOnline="serverOnline" :activeTab="activeTab" @change-tab="activeTab = $event"
-      @open-config="showConfigPanel = true" @minimize="onMinimize" @close="onClose" />
+      :serverOnline="serverOnline" :activeTab="activeTab" :updateAvailable="updateAvailable" :updateVersion="updateVersion" :updateDownloading="updateDownloading"
+      @change-tab="activeTab = $event" @open-config="showConfigPanel = true" @minimize="onMinimize" @close="onClose" @do-update="doUpdate" />
     <main class="content">
       <Dashboard v-if="activeTab === 'dashboard'" :config="config" :stats="stats" :heartbeatDot="heartbeatDot"
         :heartbeatStatus="heartbeatStatus" :heartbeatLatency="heartbeatLatency" />
