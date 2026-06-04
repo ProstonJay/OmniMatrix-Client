@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "OmniMatrix",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "identifier": "com.omnimatrix.client",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -29,6 +29,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "resources": {
       "../scripts/replyTweet.js": "scripts/replyTweet.js"
     },
