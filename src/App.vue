@@ -57,6 +57,11 @@ const config = reactive(DEFAULT_CONFIG())
 
 const activeTab = ref('dashboard')
 const showConfigPanel = ref(false)
+
+// ─── 启动蒙版
+const splashVisible = ref(true)
+const splashMsg = ref('检测更新中...')
+const splashIsUpdating = ref(false)
 const logs = ref([])
 function addLog(level, msg) { const time = new Date().toLocaleTimeString('zh-TW', { hour12: false }); logs.value.unshift({ time, level, msg }); if (logs.value.length > 200) logs.value.pop() }
 
@@ -450,7 +455,10 @@ function onRestoreAccount(serial) {
 }
 
 onMounted(async () => {
-  // ── 启动时从 Tauri store 异步加载持久化数据（同时迁移旧 localStorage 数据）
+  // ── 第一步：检查更新（含蒙版），完成后再执行初始化
+  await checkAppUpdateOnStartup()
+
+  // ── 第二步：从 Tauri store 异步加载持久化数据
   const [rawCfg, rawAccounts, rawReply] = await Promise.all([
     storageRead(STORAGE_KEY),
     storageRead(ACCOUNTS_KEY),
@@ -494,8 +502,8 @@ onMounted(async () => {
   startAdsPoll()
   sendHeartbeat(); heartbeatTimer = setInterval(sendHeartbeat, 5000); cooldownTimer = setInterval(runCooldownScan, 10000)
   setInterval(() => ensureFetchTasks().catch(() => { }), 5000)
-  // 启动后延迟 3 秒检查更新，避免影响启动速度
-  setTimeout(() => checkAppUpdate().catch(() => {}), 3000)
+  // 所有初始化完成，隐藏启动蒙版
+  splashVisible.value = false
 })
 onUnmounted(() => { clearInterval(heartbeatTimer); clearInterval(cooldownTimer); stopAdsPoll() })
 
@@ -511,22 +519,31 @@ const updateAvailable = ref(false)
 const updateVersion = ref('')
 const updateDownloading = ref(false)
 
-async function checkAppUpdate() {
+// 启动时更新检查（含蒙版流程），检查/更新完成后才进入初始化
+async function checkAppUpdateOnStartup() {
   try {
-    addLog('info', '🔍 正在檢查軟體更新...')
+    splashMsg.value = '检测更新中...'
+    splashIsUpdating.value = false
     const update = await checkUpdate()
     if (update) {
       updateAvailable.value = true
       updateVersion.value = update.version
-      addLog('info', `🆕 發現新版本 v${update.version}，點擊頂欄更新按鈕開始下載`)
-    } else {
-      addLog('info', `✅ 當前已是最新版本 v${appVersion}`)
+      splashIsUpdating.value = true
+      splashMsg.value = `发现新版本 v${update.version}，更新中...`
+      await update.downloadAndInstall()
+      splashMsg.value = '更新完成，即将重启...'
+      await new Promise(r => setTimeout(r, 1500))
+      await relaunch()
+      // relaunch 后不会继续执行
     }
+    // 无更新，直接返回继续初始化
   } catch (e) {
-    addLog('warn', `檢查更新失敗: ${e?.message || e}`)
+    splashMsg.value = `检测更新失败，跳过...`
+    await new Promise(r => setTimeout(r, 1000))
   }
 }
 
+// 顶栏手动触发更新（已进入主界面后使用）
 async function doUpdate() {
   if (updateDownloading.value) return
   updateDownloading.value = true
@@ -562,6 +579,19 @@ const heartbeatDot = computed(() => ({ ok: '🟢', error: '🔴', idle: '⚪', p
 
 <template>
   <div class="app">
+    <!-- 启动蒙版：检测更新 / 更新中 -->
+    <Transition name="splash-fade">
+      <div v-if="splashVisible" class="splash-overlay">
+        <div class="splash-box">
+          <div class="splash-logo">⚡</div>
+          <p class="splash-title">OmniMatrix</p>
+          <div class="splash-spinner"></div>
+          <p class="splash-msg">{{ splashMsg }}</p>
+          <p v-if="splashIsUpdating" class="splash-updating">正在下载安装，请勿关闭...</p>
+          <p class="splash-version">v{{ appVersion }}</p>
+        </div>
+      </div>
+    </Transition>
     <TopBar :config="config" :appVersion="appVersion" :heartbeatDot="heartbeatDot" :heartbeatLatency="heartbeatLatency"
       :serverOnline="serverOnline" :activeTab="activeTab" :updateAvailable="updateAvailable" :updateVersion="updateVersion" :updateDownloading="updateDownloading"
       @change-tab="activeTab = $event" @open-config="showConfigPanel = true" @minimize="onMinimize" @close="onClose" @do-update="doUpdate" />
@@ -1163,5 +1193,73 @@ code {
 ::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 3px;
+}
+
+/* ─── 启动蒙版 */
+.splash-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.splash-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.splash-logo {
+  font-size: 48px;
+  line-height: 1;
+  filter: drop-shadow(0 0 16px #58a6ff88);
+}
+
+.splash-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 2px;
+}
+
+.splash-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.splash-msg {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.splash-updating {
+  color: var(--yellow);
+  font-size: 12px;
+}
+
+.splash-version {
+  color: var(--text2);
+  font-size: 11px;
+  font-family: monospace;
+}
+
+.splash-fade-leave-active {
+  transition: opacity 0.4s ease;
+}
+.splash-fade-leave-to {
+  opacity: 0;
 }
 </style>
