@@ -1,0 +1,28 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main window",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "opener:default",
+    "core:window:allow-minimize",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging",
+    "http:default",
+    "http:allow-fetch-send",
+    {
+      "identifier": "http:allow-fetch",
+      "allow": [
+        { "url": "http://127.0.0.1:50325/**" },
+        { "url": "http://127.0.0.1:50326/**" },
+        { "url": "http://127.0.0.1:50327/**" },
+        { "url": "http://localhost:3000/**" },
+        { "url": "http://localhost:*/**" },
+        { "url": "http://192.168.110.221:3000/**" }
+      ]
+    }
+  ]
+}
