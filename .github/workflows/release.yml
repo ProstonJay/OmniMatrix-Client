@@ -1,0 +1,46 @@
+name: 'Publish Release'
+
+on:
+  push:
+    tags:
+      - 'v*' # 当你 push 一个以 v 开头的 tag（如 v0.1.2）时，触发自动化流水线
+
+jobs:
+  publish-tauri:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'windows-latest' # 专门为你编译 Windows 版本的客户端
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'npm'
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install root dependencies
+        run: npm install
+
+      - name: Build Tauri App & Create Release
+        uses: tauri-apps/tauri-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'OmniMatrix Client ${{ github.ref_name }}'
+          releaseBody: '🚀 这是一个由 GitHub Actions 自动编译、签名并发布的版本。'
+          releaseDraft: false
+          prerelease: false
